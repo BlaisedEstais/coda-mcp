@@ -1,38 +1,52 @@
-# coda-mcp
+# coda-mcp v2
 
-MCP server for the [Coda.io](https://coda.io) API. Gives any MCP-compatible client (Claude, Cowork, Claude Code…) direct read/write access to Coda tables.
+Full-featured **MCP server** for the [Coda.io API](https://coda.io/developers/apis/v1), designed for use with Claude Desktop and any MCP client.
 
-Built from real production patterns — specifically avoids the row-by-row upsert trap that turns a 1000-row write into a multi-hour rate-limited nightmare.
+## Features (v2 — 33 tools)
 
----
+| Category | Tools |
+|---|---|
+| **Docs** | `list_docs`, `get_doc`, `create_doc`, `delete_doc` |
+| **Pages** | `list_pages`, `get_page`, `create_page`, `update_page`, `delete_page`, `export_page_content` |
+| **Tables** | `list_tables`, `get_table` |
+| **Columns** | `list_columns`, `get_column`, `delete_column` |
+| **Rows** | `fetch_rows`, `get_row`, `upsert_rows`, `insert_rows`, `update_row`, `delete_rows`, `delete_rows_by_query` |
+| **Buttons** | `push_button` |
+| **Formulas** | `list_formulas`, `get_formula` |
+| **Controls** | `list_controls`, `get_control` |
+| **Automations** | `trigger_automation` |
+| **Permissions** | `list_permissions`, `add_permission`, `delete_permission` |
+| **Analytics** | `get_doc_analytics`, `get_row_analytics` |
 
-## Quick install
+## Key design principles
+
+- **Never write row-by-row.** `coda_upsert_rows` batches 100 rows per POST — safe for thousands of rows.
+- **Always paginate.** All read tools fetch all pages automatically.
+- **Always use column IDs**, not display names (names drift; IDs are stable).
+- **429 back-off.** All requests retry with `Retry-After` respect.
+
+## Install
 
 ```bash
-# 1. Install dependencies
 pip install mcp httpx
-
-# 2. Set your API token (get it at coda.io/account → API settings)
-export CODA_API_TOKEN=your-token-here
-
-# 3. Test the server starts
-python coda_mcp.py
-# Should hang silently waiting on stdin — that's correct for stdio transport.
-# Ctrl-C to exit.
 ```
 
----
+Or with pipx:
 
-## Register with Claude / Cowork
+```bash
+pipx install git+https://github.com/btdestais/coda-mcp
+```
 
-### Claude Code (`~/.claude/claude_code_config.json` or `.mcp.json` in your project)
+## Claude Desktop setup
+
+Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 
 ```json
 {
   "mcpServers": {
     "coda": {
-      "command": "python",
-      "args": ["/absolute/path/to/coda_mcp.py"],
+      "command": "python3",
+      "args": ["/path/to/coda_mcp.py"],
       "env": {
         "CODA_API_TOKEN": "your-token-here"
       }
@@ -41,99 +55,44 @@ python coda_mcp.py
 }
 ```
 
-### Claude Desktop (`~/Library/Application Support/Claude/claude_desktop_config.json`)
+Get your API token at: https://coda.io/account → **API tokens**
 
-Same format as above — just use the absolute path to `coda_mcp.py`.
-
----
-
-## Available tools
-
-| Tool | Purpose |
-|---|---|
-| `coda_list_docs` | List accessible docs (with optional name filter) |
-| `coda_get_doc` | Get metadata for a specific doc |
-| `coda_list_tables` | List all tables/views in a doc (with row counts) |
-| `coda_list_columns` | List columns **with stable IDs** — always use IDs in writes, never display names |
-| `coda_fetch_rows` | Fetch rows with auto-pagination. Supports `value_format=rich` for resolved lookups |
-| `coda_get_row` | Fetch a single row by ID |
-| `coda_upsert_rows` | **⭐ THE bulk write tool.** Batches 100 rows/call, uses `keyColumns` for upsert matching |
-| `coda_insert_rows` | Insert new rows in bulk (no dedup) |
-| `coda_update_row` | Update a single row by ID (for ≤5 rows only) |
-| `coda_delete_rows` | Delete rows by ID list |
-| `coda_resolve_formula` | Evaluate a Coda formula |
-
----
-
-## The upsert rule — read this
-
-Coda's API has two ways to write rows:
-
-**❌ Row-by-row (slow — don't use for bulk):**
-```
-PUT /docs/{docId}/tables/{tableId}/rows/{rowId}   ← one call per row
-```
-With thousands of rows, this burns through rate limits in seconds and your job runs for hours.
-
-**✅ Bulk upsert (fast — always use this):**
-```
-POST /docs/{docId}/tables/{tableId}/rows
-  { "rows": [...up to 100 rows...], "keyColumns": ["c-colId"] }
-```
-100 rows per call, matched and upserted by the key columns you specify. A 5000-row job that would take hours row-by-row takes ~5 minutes with batches.
-
-`coda_upsert_rows` always uses the bulk approach. The `key_column_ids` parameter tells Coda which column(s) to match on — typically `IDENTIFIANT UNIQUE COMPLET` (`c-3inXE8XQBX` in the Zita doc) for letter-table upserts.
-
----
-
-## Example: upsert 3 rows in the Zita Lettres table
+## Quick example (bulk upsert)
 
 ```python
-# Ask Claude / call the tool directly:
+# Via Claude / MCP:
 coda_upsert_rows(
     doc_id="AAMBGrHiFm",
-    table_id="grid-qwNymJesmG",
+    table_id="grid-abc123",
     rows=[
         {"cells": [
-            {"column": "c-3inXE8XQBX", "value": "DOSSIER1&COT1"},
-            {"column": "c-K3rq-fpzbK", "value": "Paris, Rome"}
+            {"column": "c-name", "value": "Alice"},
+            {"column": "c-score", "value": 98}
         ]},
         {"cells": [
-            {"column": "c-3inXE8XQBX", "value": "DOSSIER1&COT2"},
-            {"column": "c-K3rq-fpzbK", "value": "Vienne"}
+            {"column": "c-name", "value": "Bob"},
+            {"column": "c-score", "value": 75}
         ]},
     ],
-    key_column_ids=["c-3inXE8XQBX"],
+    key_column_ids=["c-name"]  # upsert key
 )
 ```
 
----
+## What's new in v2
 
-## Rate limits & tuning
+- **Pages**: full CRUD + content export (Markdown / HTML / PDF)
+- **Docs**: create & delete
+- **Tables**: `get_table` metadata
+- **Columns**: `get_column`, `delete_column`
+- **Rows**: bulk delete endpoint (no more one-by-one), `delete_rows_by_query` with dry-run
+- **Buttons**: `push_button` to trigger button columns
+- **Formulas**: `list_formulas`, `get_formula`
+- **Controls**: `list_controls`, `get_control`
+- **Automations**: `trigger_automation`
+- **Permissions**: full ACL management
+- **Analytics**: doc analytics + row analytics
+- **Better HTTP client**: unified `_request()` with exponential back-off on all methods
 
-- Default `delay_between_batches=6.0` seconds is safe for sustained workloads.
-- For a one-shot burst (< 500 rows), you can lower to 3–4s.
-- 429s are retried automatically using the `Retry-After` header.
-- `coda_delete_rows` throttles at ~3 deletions/second (Coda doesn't support bulk delete).
+## License
 
----
-
-## Publishing / sharing
-
-This server follows the MCP stdio spec and has no external dependencies beyond `mcp` + `httpx`. To share it:
-
-- **GitHub** — push as a public repo and others can `pip install` from it.
-- **PyPI** — wrap in a `pyproject.toml` with `coda-mcp` as the package name, then `pip install coda-mcp`.
-- **MCP registry** — submit to [mcp.so](https://mcp.so) or the Anthropic MCP directory once published on PyPI/GitHub.
-
-The server is generic (no Zita-specific constants hardcoded) — doc IDs, table IDs, and column IDs are all passed as parameters.
-
----
-
-## Notes on value_format
-
-| Format | Best for |
-|---|---|
-| `simple` | Plain values, fastest |
-| `simpleWithArrays` | Multi-select / lookup columns (returns arrays) — **use this as default** |
-| `rich` | Returns `{id, name}` objects for lookup columns — use when you need both the row ID and the display label |
+MIT
