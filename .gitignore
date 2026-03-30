@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+*.egg-info/
+dist/
+build/
+.env
+.env.local
+secrets.*
+# Claude Desktop config is in ~/Library — not here.
+# But just in case:
+claude_desktop_config.json
