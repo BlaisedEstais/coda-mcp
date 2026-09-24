@@ -26,9 +26,9 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/btdestais/coda-mcp"
-Repository = "https://github.com/btdestais/coda-mcp"
-Issues = "https://github.com/btdestais/coda-mcp"
+Homepage = "https://github.com/BlaisedEstais/coda-mcp"
+Repository = "https://github.com/BlaisedEstais/coda-mcp"
+Issues = "https://github.com/BlaisedEstais/coda-mcp"
 
 [project.scripts]
 coda-mcp = "coda_mcp:main"

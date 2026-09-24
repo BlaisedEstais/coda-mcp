@@ -34,7 +34,7 @@ pip install mcp httpx
 Or with pipx:
 
 ```bash
-pipx install git+https://github.com/btdestais/coda-mcp
+pipx install git+https://github.com/BlaisedEstais/coda-mcp
 ```
 
 ## Claude Desktop setup
